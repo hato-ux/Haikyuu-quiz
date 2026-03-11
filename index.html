@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="配球マスター" />
+  <title>配球マスター</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel">
+const { useState, useEffect } = React;
+
+
+// ===== データ定義 =====
+const INNINGS = ["1回","2回","3回","4回","5回","6回","7回","8回","9回"];
+const OUTS_LIST = ["0アウト","1アウト","2アウト"];
+const SCORES = ["同点","1点リード","2点リード","3点以上リード","1点ビハインド","2点ビハインド","3点以上ビハインド"];
+const PITCHER_HANDS = ["右投げ","左投げ"];
+const CONTROL_LEVELS = [
+  { label:"制球◎ 抜群", desc:"四隅に投げ分けられる", color:"#00e676" },
+  { label:"制球○ 良い",  desc:"ほぼ狙い通りに投げられる", color:"#60c8ff" },
+  { label:"制球△ 普通",  desc:"多少ばらつきがある", color:"#ffb74d" },
+  { label:"制球× 悪い",  desc:"コントロールが定まらない", color:"#ff6b6b" },
+];
+const PITCH_TYPES = ["直球","カーブ","スライダー","チェンジアップ","フォーク","シュート","カットボール","ツーシーム"];
+
+// 資料Level.3に基づく打者タイプ（構え特徴 + パワー + 打球傾向 + 走力）
+const BATTER_PROFILES = [
+  {
+    name:"グリップが高いバッター", hand:"右", swing:"外巻き",
+    power:"中距離", speed:"普通",
+    good:"高め", weak:"外角低めの変化球", worstWeak:"外角低めの変化球",
+    timing:"速い球に合わせやすいが低めで差し込まれる",
+    note:"高め◎・低め外角変化が弱点"
+  },
+  {
+    name:"グリップが低いバッター", hand:"左", swing:"内巻き",
+    power:"中距離", speed:"普通",
+    good:"低め", weak:"高め", worstWeak:"内角高め",
+    timing:"低めに強くタイミングを合わせやすい",
+    note:"低め◎・高め特に内角高め×"
+  },
+  {
+    name:"振りが大きいバッター（長距離）", hand:"右", swing:"外巻き",
+    power:"長距離", speed:"鈍足",
+    good:"甘い球・緩い球", weak:"高め・インコース", worstWeak:"緩急",
+    timing:"タイミングを外されると空振りしやすい",
+    note:"甘い球・緩い球に強いが緩急に弱い"
+  },
+  {
+    name:"スタンスが狭いバッター（回転型）", hand:"右", swing:"内巻き",
+    power:"短距離", speed:"俊足",
+    good:"インコース", weak:"速い変化球・外角", worstWeak:"外角",
+    timing:"インコースのタイミングが早く外は遅れやすい",
+    note:"インコース◎・外角と速い変化球×"
+  },
+  {
+    name:"前屈みのバッター", hand:"左", swing:"外巻き",
+    power:"中距離", speed:"普通",
+    good:"真ん中・外角・低め", weak:"高めの速球・インコース", worstWeak:"インコースの落ちる球",
+    timing:"高めの速球にタイミングが遅れやすい",
+    note:"真ん中外角低め◎・インコースの落ちる球×"
+  },
+  {
+    name:"スタンスが広いバッター", hand:"右", swing:"内巻き",
+    power:"中距離", speed:"鈍足",
+    good:"甘い低め・ベルト付近", weak:"高め・四隅", worstWeak:"低めのボール球",
+    timing:"高めの速球に差し込まれやすく四隅に弱い",
+    note:"甘い低め◎・高めと四隅に弱い"
+  },
+  {
+    name:"直立型バッター（回転しやすい）", hand:"右", swing:"内巻き",
+    power:"長距離", speed:"普通",
+    good:"インコース・インハイ", weak:"アウトコース", worstWeak:"外角低め落ちる球",
+    timing:"外角のタイミングが遅れやすい",
+    note:"インコース◎・外角低めの落ちる球×"
+  },
+  {
+    name:"ボックス前立ち（変化球が苦手）", hand:"左", swing:"外巻き",
+    power:"短距離", speed:"俊足",
+    good:"真ん中付近の甘い球", weak:"高め", worstWeak:"低めのボール球になる変化球",
+    timing:"変化球のタイミングが取れない・早打ち",
+    note:"甘い球◎・低めへの変化球×"
+  },
+  {
+    name:"腕の長いバッター", hand:"左", swing:"内巻き",
+    power:"中距離", speed:"普通",
+    good:"アウトコース（ボール気味でも）・低め", weak:"インコース", worstWeak:"インハイ速球",
+    timing:"外はリーチが長く打てるが内は窮屈になる",
+    note:"外角◎・インハイ速球×"
+  },
+  {
+    name:"当て逃げバッター（コンタクト型）", hand:"右", swing:"外巻き",
+    power:"短距離", speed:"超俊足",
+    good:"インコース・真ん中の甘い球", weak:"厳しいインコース・外角", worstWeak:"外角低め・速い変化",
+    timing:"ストレートに合わせており追い込まれるとカット",
+    note:"甘い球◎・外角低めと速い変化×"
+  },
+];
+
+// 走者状況（走者ベースと矛盾しないゴール設定のため構造化）
+const RUNNER_SITUATIONS = [
+  { base:"走者なし", detail:"", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","フライアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"一塁", detail:"俊足・スタートが早い", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"一塁", detail:"鈍足・盗塁の心配なし", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","フライアウトを取りたい","何でもアウトに"] },
+  { base:"一塁", detail:"盗塁のサインが出ている可能性あり", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","何でもアウトに"] },
+  { base:"二塁", detail:"外野フライで生還できる足がある", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"二塁", detail:"スコアリングポジション", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"三塁", detail:"スクイズの可能性あり", allowedGoals:["三振を取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"三塁", detail:"内野ゴロでも本塁突入できる足", allowedGoals:["三振を取りたい","フライアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"一二塁", detail:"ダブルプレーを狙いたい場面", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"一三塁", detail:"スクイズ・ヒットエンドランの可能性", allowedGoals:["三振を取りたい","内野フライを打たせたい","ゴロアウトを取りたい","何でもアウトに"] },
+  { base:"二三塁", detail:"内野ゴロでも2点入る場面", allowedGoals:["三振を取りたい","フライアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"満塁", detail:"押し出し四球に注意・ゴロアウトが理想", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","内野フライを打たせたい","何でもアウトに"] },
+];
+
+// 打者の狙い（走者状況と矛盾しないよう状況で選ぶ）
+const BATTER_GOALS_BY_RUNNER = {
+  "走者なし": ["長打・ホームランを狙っている","初球から積極的に振ってくる","出塁したい（四球でもOK）","センター返しで確実につなぎたい","引っ張りにかかっている","ボール球を見極めてフルカウントに持ち込みたい"],
+  "一塁":     ["長打・ホームランを狙っている","右方向へ流し打ちしたい","ヒットエンドランのサインが出ている","引っ張りにかかっている","初球から積極的に振ってくる"],
+  "二塁":     ["センター返しで確実につなぎたい","右方向へ流し打ちしたい","長打を狙っている","犠牲フライを狙っている","引っ張りにかかっている"],
+  "三塁":     ["スクイズを狙っている","犠牲フライを狙っている","センター返しで確実に打ちたい","引っ張りにかかっている"],
+  "一二塁":   ["長打・ホームランを狙っている","右方向へ流し打ちしたい","ヒットエンドランのサインが出ている","引っ張りにかかっている","センター返しでつなぎたい"],
+  "一三塁":   ["スクイズを狙っている","犠牲フライを狙っている","ヒットエンドランのサインが出ている","長打を狙っている"],
+  "二三塁":   ["犠牲フライを狙っている","センター返しで確実につなぎたい","長打を狙っている","引っ張りにかかっている"],
+  "満塁":     ["犠牲フライを狙っている","長打・押し出しを狙っている","センター返しで確実につなぎたい","四球を狙ってボール球を見極めている"],
+};
+
+const GAME_CONTEXTS = [
+  "この打者は前の打席でタイムリーヒットを打っている",
+  "この打者は前の打席で三振に倒れている",
+  "この打者は今日2打席連続四球を選んでいる",
+  "この打者は前の打席でホームランを打っている",
+  "投手は前のイニングから連続三振中で球が走っている",
+  "投手は前のイニングに2四球を出し制球が乱れ気味",
+  "この打者はこの投手から過去に相性よく打っている",
+  "この打者はこの投手が苦手で過去の対戦はほぼ凡退",
+  "試合序盤でお互いのデータが少ない初対決",
+  "この打者は今日絶好調でヒット2本を打っている",
+];
+
+const GRID_5x5 = [
+  {id:0,label:"高外B",strike:false},{id:1,label:"高B",strike:false},{id:2,label:"高B",strike:false},{id:3,label:"高B",strike:false},{id:4,label:"高内B",strike:false},
+  {id:5,label:"外B",strike:false},{id:6,label:"高外",strike:true},{id:7,label:"高中",strike:true},{id:8,label:"高内",strike:true},{id:9,label:"内B",strike:false},
+  {id:10,label:"外B",strike:false},{id:11,label:"外",strike:true},{id:12,label:"真中",strike:true},{id:13,label:"内",strike:true},{id:14,label:"内B",strike:false},
+  {id:15,label:"外B",strike:false},{id:16,label:"低外",strike:true},{id:17,label:"低中",strike:true},{id:18,label:"低内",strike:true},{id:19,label:"内B",strike:false},
+  {id:20,label:"低外B",strike:false},{id:21,label:"低B",strike:false},{id:22,label:"低B",strike:false},{id:23,label:"低B",strike:false},{id:24,label:"低内B",strike:false},
+];
+const ZONE_DISPLAY = {
+  0:"高め外ボール球",1:"高めボール球",2:"高めボール球(中央)",3:"高めボール球",4:"高め内ボール球",
+  5:"外角ボール球(高め)",6:"高め外角",7:"高め真ん中",8:"高め内角",9:"内角ボール球(高め)",
+  10:"外角ボール球",11:"外角",12:"真ん中",13:"内角",14:"内角ボール球",
+  15:"外角ボール球(低め)",16:"低め外角",17:"低め真ん中",18:"低め内角",19:"内角ボール球(低め)",
+  20:"低め外ボール球",21:"低めボール球",22:"低めボール球(中央)",23:"低めボール球",24:"低め内ボール球",
+};
+
+function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function genHistory(balls, strikes) {
+  if (balls === 0 && strikes === 0) return [];
+  const sequence = [];
+  let rB = balls, rS = strikes;
+  for (let i = 0; i < balls + strikes; i++) {
+    const rem = (balls + strikes) - i;
+    let isSt;
+    if (rB === 0) isSt = true;
+    else if (rS === 0) isSt = false;
+    else isSt = Math.random() < rS / rem;
+    if (isSt) { sequence.push("s"); rS--; } else { sequence.push("b"); rB--; }
+  }
+  const sz = GRID_5x5.filter(function(z){ return z.strike; });
+  const bz = GRID_5x5.filter(function(z){ return !z.strike; });
+  let cumS = 0;
+  return sequence.map(function(type) {
+    const pitch = rand(PITCH_TYPES);
+    if (type === "s") {
+      const zone = rand(sz);
+      const result = cumS >= 2 ? "ファウル" : "ストライク";
+      if (cumS < 2) cumS++;
+      return { pitch: pitch, zoneLabel: ZONE_DISPLAY[zone.id], result: result };
+    } else {
+      const zone = rand(bz);
+      return { pitch: pitch, zoneLabel: ZONE_DISPLAY[zone.id], result: "ボール" };
+    }
+  });
+}
+
+function generateSituation() {
+  const counts = [
+    {b:0,s:0},{b:1,s:0},{b:0,s:1},{b:2,s:0},{b:1,s:1},{b:0,s:2},
+    {b:3,s:0},{b:2,s:1},{b:1,s:2},{b:3,s:1},{b:2,s:2},{b:3,s:2},
+  ];
+  const count = rand(counts);
+  const rs = rand(RUNNER_SITUATIONS);
+  const outGoal = rand(rs.allowedGoals);
+  const batterGoalList = BATTER_GOALS_BY_RUNNER[rs.base] || BATTER_GOALS_BY_RUNNER["走者なし"];
+  const batterGoal = rand(batterGoalList);
+  return {
+    inning: rand(INNINGS),
+    outs: rand(OUTS_LIST),
+    score: rand(SCORES),
+    runnerBase: rs.base,
+    runnerDetail: rs.detail,
+    batter: rand(BATTER_PROFILES),
+    pitcherHand: rand(PITCHER_HANDS),
+    control: rand(CONTROL_LEVELS),
+    count: count,
+    history: genHistory(count.b, count.s),
+    outGoal: outGoal,
+    batterGoal: batterGoal,
+    context: rand(GAME_CONTEXTS),
+  };
+}
+
+async function callAPI(messages, sys, maxT) {
+  const body = { model:"claude-sonnet-4-20250514", max_tokens:maxT, messages:messages };
+  if (sys) body.system = sys;
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data && data.error ? data.error.message : "HTTP " + res.status);
+  return (data.content||[]).filter(function(b){ return b.type==="text"; }).map(function(b){ return b.text; }).join("");
+}
+
+// ===== 配球論テキスト =====
+const REFERENCE_SECTIONS = [
+  {
+    title:"Level.1 ボールの分別",
+    content:"球速で分ける：「速」ストレート／「半速」5〜10km遅い／「中」11〜20km遅い／「遅」20km以上遅い。\nコースは「近」と「遠」で分ける。内・高・速球は近、外・低・遅球は遠。\n3種類の球：カウント球（ストライクを取る）／勝負球（コースも球質もパーフェクト）／外し球（次の球を活かすボール球）"
+  },
+  {
+    title:"Level.2 球種の性能理解",
+    content:"直球：最速・コントロールしやすい。回転数が多いとファウルや空振りが取れる。\nカットボール：半速球。1〜2個分曲がる。打たせて取るボール。\nスライダー：中間速。カウント球・決め球。縦変化→ゴロ・空振り。横変化→内外から使える。\nシュート：半速球。詰まらせる。右対左で引っ掛けや空振り。\nツーシーム：半速球。斜め下に沈む。引っ掛けゴロに有効。\nチェンジアップ：中〜遅球。ゾーン内で効果大。引っ掛けや空振り。\nフォーク：半〜中速球。決め球・空振り球。カウントを取れると有効。\nカーブ：遅球。タイミングを外す。狙われると長打になる。"
+  },
+  {
+    title:"Level.3 打者の分類",
+    content:"グリップ高い→高め◎・外角低め変化球×。グリップ低い→低め◎・内角高め×。\n振りが大きい→甘い球◎・緩急×。スタンス狭い→インコース◎・外角×。\n前屈み→真ん中外低め◎・インコース落ちる球×。スタンス広い→甘い低め◎・高め・四隅×。\n直立型→インコース◎・外角低め落ちる球×。ボックス前立ち→甘い球◎・低め変化×。\n腕が長い→外角◎・インハイ×。当て逃げ型→甘い球◎・外角低め・速い変化×。\n【パワー】長距離／中距離／短距離。【打球傾向】外巻き（レフト〜ライト定位置）／内巻き（レフト定位置〜ライト線）。【走力】超俊足／俊足／普通／鈍足"
+  },
+  {
+    title:"Level.4 基本的考え方",
+    content:"配球は3種類：投手優先配球（投手のいい球中心）／打者優先配球（打者の特徴・タイミング対応）／状況優先配球（欲しい結果から逆算）。\n鉄則①ピンチではカウント球を投げない（勝負球か外し球）。\n鉄則②同じボールを続けるときはより近く・より遠く（前より甘くなると打たれる）。"
+  },
+  {
+    title:"Level.5 ポイント：タイミング",
+    content:"タイミングは「奥」と「前」。打者のミートポイントより奥か前で振らせる。\n速・遅はコースを含めて前の球より速いか遅いかで判断。\n打者のタイミングの軸は前の球との比較。「近い球」→速く感じる。「遠い球」→遅く感じる。\n配球の大前提：打者のタイミングを前に出させるか奥に詰まらせるかを考える。"
+  },
+  {
+    title:"Level.5 ポイント：打者との距離",
+    content:"コースはホームベースでなく「打者との距離」で考える。\n前の肩が早く開く→外が遠く見え、内は見やすくなる。\nステップで踏み込む→外が遠く内が近くなる。開く→外が遠く内は振りやすい。\n上から出るスイング→高め振りやすく低めが遠い。下から出る→低め振りやすく高めが遠い。\n腕が長い打者→外が近く感じるが内は窮屈。"
+  },
+  {
+    title:"Level.5 ケース別配球",
+    content:"【走者なし】投手優先。ストライク先行で遠近を使いタイミングを崩す。\n【1死1塁・2死1塁】長打以外失点なし。遠近でタイミングをずらす。半速球が特に有効。\n【1死2塁・2死2塁】遠近・緩急を駆使。自分のスイングをさせない。\n【1死1・2塁】内野ゴロ（ショートゴロ）が理想。緩急・遠近を使う。\n【無死・1死3塁/2・3塁】三振が理想。早く追い込む。ファールになるボールから決め球。\n【満塁】三振狙いは押し出しリスク。緩急で内野ゴロ。1球だけ外し球が有効。\n【無死1塁/2塁/1・2塁】バントの可能性。チームの方針・打順で判断。決めつけない。"
+  },
+  {
+    title:"Level.6 カウント別打者意識",
+    content:"0-0初球：状況によって変わる。ピンチでは「打ってもファール」になるコースへ。\n0-1：初球のとり方で判断。タイミング合ってない→同じ球種。ファウルや合った空振り→球種を変える。\n0-2追い込み：ボール球で外すのでなく「ボール球で誘う」。見せ球として使う。\n1-2追い込み：投手に余裕あり。焦ってゾーンに投げない。打者の早・遅を見極め勝負球を決める。\n2-2：圧倒的投手有利。この1球で決める意識。それまでの流れをうまく使う。\n3-2フルカウント：「ストライクを取りに来る」という打者心理を利用。ランナーなしならど真ん中に。ピンチなら球種・軌道で勝負。"
+  },
+  {
+    title:"Level.7 打ち取り方のテクニック",
+    content:"右打者をセカンドゴロに：外のストレートで99%セカンド方向へ。セカンドを1・2塁間に寄せる。\n左打者にレフトフライ：外のストレートでショート定位置から左方向へ。ショートを三遊間に。\nゴロでゲッツー：開きなくヘッドが出る→チェンジアップ系（早遅のリズム）。開きなくヘッドが出ない→インコースのストレート（遅早のリズム）。縦の半速スライダーが最も有効。\n外野フライ：バッティングのいい打者の打ち損じを外野フライに。外を攻めて外野を右（左打者なら左）方向に寄せる。\n空振り三振：前の球より質の高いボール。\n見逃し三振：全く投げていない球種・軌道。右対右のインスラ、左対左のインコース直球等。"
+  },
+];
+
+function App() {
+  const [page, setPage] = useState("game"); // "game" or "reference"
+  const [sit, setSit] = useState(null);
+  const [selPitch, setSelPitch] = useState(null);
+  const [selZone, setSelZone] = useState(null);
+  const [answer, setAnswer] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState("select");
+  const [tab, setTab] = useState("pitch");
+  const [totalQ, setTotalQ] = useState(0);
+  const [totalOK, setTotalOK] = useState(0);
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatIn, setChatIn] = useState("");
+  const [chatLoad, setChatLoad] = useState(false);
+  const [refSection, setRefSection] = useState(0);
+
+  useEffect(function() { newQ(); }, []);
+
+  function newQ() {
+    setSit(generateSituation());
+    setSelPitch(null); setSelZone(null); setAnswer(null);
+    setPhase("select"); setTab("pitch");
+    setChatMsgs([]); setChatIn("");
+  }
+
+  async function submit() {
+    if (!selPitch || selZone === null) return;
+    setLoading(true); setPhase("result");
+    const zl = ZONE_DISPLAY[selZone];
+    const isSt = GRID_5x5[selZone].strike;
+    const hist = sit.history.length > 0
+      ? sit.history.map(function(h,i){ return (i+1)+"球目:"+h.pitch+"→"+h.zoneLabel+"→"+h.result; }).join(", ")
+      : "（初球）";
+    const p =
+      "あなたは高校野球の配球専門コーチです。以下の状況での投球を評価してください。\n\n" +
+      "【投手】" + sit.pitcherHand + " / " + sit.control.label + "（" + sit.control.desc + "）\n" +
+      "【状況】" + sit.inning + " " + sit.outs + " / " + sit.score + "\n" +
+      "【走者】" + sit.runnerBase + (sit.runnerDetail ? "（" + sit.runnerDetail + "）" : "") + "\n" +
+      "【打者の構えタイプ】" + sit.batter.name + "（" + sit.batter.hand + "打ち・" + sit.batter.power + "・" + sit.batter.swing + "傾向・" + sit.batter.speed + "）\n" +
+      "　得意: " + sit.batter.good + " / 弱点: " + sit.batter.weak + " / 最も苦手: " + sit.batter.worstWeak + "\n" +
+      "　タイミングの特徴: " + sit.batter.timing + "\n" +
+      "　打者の狙い: " + sit.batterGoal + "\n" +
+      "【試合の文脈】" + sit.context + "\n" +
+      "【カウント】" + sit.count.b + "B-" + sit.count.s + "S\n" +
+      "【配球の流れ】" + hist + "\n" +
+      "【投手の目標】" + sit.outGoal + "\n" +
+      "【今回投じた球】" + selPitch + " / " + zl + "（" + (isSt?"ストライク":"ボール") + "ゾーン）\n\n" +
+      "以下のJSONのみ返答。前置き・マークダウン・コードブロック不要。最初の文字は{、最後は}:\n" +
+      '{"rating":"○か△か×","ratingLabel":"優秀か良いか普通か惜しいか改善が必要","score":1か0,"intent":"打者の弱点とタイミングを踏まえた意図2文","evaluation":"評価2〜3文","risk":"リスク1〜2文","alternative":"代替案1〜2つ","tip":"配球の原則1文","goodExamples":[{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"}]}';
+    try {
+      const txt = await callAPI([{role:"user",content:p}], null, 1200);
+      const m = txt.replace(/```json/g,"").replace(/```/g,"").trim().match(/\{[\s\S]*\}/);
+      if (!m) throw new Error("JSON not found");
+      const parsed = JSON.parse(m[0]);
+      setAnswer(parsed);
+      setTotalQ(function(q){ return q+1; });
+      if (parsed.score===1) setTotalOK(function(s){ return s+1; });
+    } catch(e) {
+      setAnswer({rating:"△",ratingLabel:"エラー",score:0,intent:"エラー: "+e.message,evaluation:"",risk:"",alternative:"",tip:"",goodExamples:[]});
+    }
+    setLoading(false);
+  }
+
+  async function sendChat() {
+    if (!chatIn.trim() || chatLoad) return;
+    const msg = chatIn.trim();
+    setChatIn("");
+    const msgs = [...chatMsgs, {role:"user",content:msg}];
+    setChatMsgs(msgs);
+    setChatLoad(true);
+    const hist = sit.history.length > 0
+      ? sit.history.map(function(h,i){ return (i+1)+"球目:"+h.pitch+"→"+h.result; }).join(", ") : "初球";
+    const sys =
+      "あなたは高校野球の配球専門コーチです。選手からの質問に状況を踏まえて日本語で答えてください。\n" +
+      "投手:" + sit.pitcherHand + " " + sit.control.label + " / " +
+      sit.inning + " " + sit.outs + " " + sit.score + " / 走者:" + sit.runnerBase +
+      " / 打者:" + sit.batter.name + "（" + sit.batter.hand + "打ち）タイミング:" + sit.batter.timing +
+      " 弱点:" + sit.batter.weak + " 最苦手:" + sit.batter.worstWeak +
+      " / 打者の狙い:" + sit.batterGoal + " / 文脈:" + sit.context +
+      " / カウント:" + sit.count.b + "B-" + sit.count.s + "S / 配球:" + hist +
+      " / 投じた球:" + selPitch + " " + ZONE_DISPLAY[selZone] +
+      (answer ? " / 評価:" + answer.rating + " " + answer.ratingLabel : "");
+    try {
+      const r = await callAPI(msgs, sys, 600);
+      setChatMsgs([...msgs,{role:"assistant",content:r}]);
+    } catch(e) {
+      setChatMsgs([...msgs,{role:"assistant",content:"エラー: "+e.message}]);
+    }
+    setChatLoad(false);
+  }
+
+  const rc = answer && answer.rating==="○" ? "#00e676" : answer && answer.rating==="×" ? "#ff5252" : "#ffab40";
+  const outsNum = sit ? parseInt(sit.outs.replace(/[^0-9]/g,"")) : 0;
+
+  // ===== 配球論ページ =====
+  if (page === "reference") {
+    return (
+      <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#060d18 0%,#0a1628 60%,#060d18 100%)",fontFamily:"'Noto Sans JP',sans-serif",color:"#dde8f0"}}>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet"/>
+        <div style={{background:"linear-gradient(90deg,#021e4a,#023a6e)",borderBottom:"1px solid rgba(0,180,220,0.3)",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue'",fontSize:"22px",letterSpacing:"4px",color:"#00d4ff",lineHeight:1}}>配球論 REFERENCE</div>
+            <div style={{fontSize:"9px",color:"rgba(180,210,240,0.4)",letterSpacing:"2px"}}>関東学園大学附属高等学校　配球論テキスト</div>
+          </div>
+          <button onClick={function(){ setPage("game"); }} style={{background:"rgba(0,100,180,0.3)",border:"1px solid rgba(0,160,220,0.4)",borderRadius:"8px",padding:"8px 14px",color:"#60c8ff",fontSize:"12px",fontWeight:700,cursor:"pointer",fontFamily:"'Noto Sans JP',sans-serif"}}>
+            ← 問題へ戻る
+          </button>
+        </div>
+        <div style={{maxWidth:"600px",margin:"0 auto",padding:"12px"}}>
+          {/* セクション選択 */}
+          <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginBottom:"12px"}}>
+            {REFERENCE_SECTIONS.map(function(s,i){
+              return (
+                <button key={i} onClick={function(){ setRefSection(i); }} style={{
+                  padding:"5px 10px",borderRadius:"6px",border:"none",cursor:"pointer",fontSize:"10px",
+                  background:refSection===i?"rgba(0,170,210,0.3)":"rgba(255,255,255,0.05)",
+                  color:refSection===i?"#00d4ff":"rgba(180,210,240,0.5)",
+                  fontWeight:refSection===i?700:400,fontFamily:"'Noto Sans JP',sans-serif",
+                }}>
+                  {s.title.split(" ")[0]}
+                </button>
+              );
+            })}
+          </div>
+          {/* セクション本文 */}
+          <div style={{background:"rgba(2,20,60,0.6)",border:"1px solid rgba(0,140,200,0.2)",borderRadius:"14px",padding:"18px"}}>
+            <div style={{fontSize:"14px",fontWeight:700,color:"#00d4ff",marginBottom:"12px",letterSpacing:"1px"}}>{REFERENCE_SECTIONS[refSection].title}</div>
+            <div style={{fontSize:"12px",lineHeight:2,color:"#a8c4de",whiteSpace:"pre-line"}}>{REFERENCE_SECTIONS[refSection].content}</div>
+          </div>
+          {/* 前後ナビ */}
+          <div style={{display:"flex",gap:"8px",marginTop:"10px"}}>
+            <button onClick={function(){ setRefSection(function(i){ return Math.max(0,i-1); }); }} disabled={refSection===0} style={{
+              flex:1,padding:"10px",borderRadius:"8px",border:"none",cursor:refSection===0?"not-allowed":"pointer",
+              background:refSection===0?"rgba(255,255,255,0.03)":"rgba(0,80,160,0.3)",
+              color:refSection===0?"rgba(255,255,255,0.15)":"#60c8ff",fontSize:"12px",fontWeight:700,fontFamily:"'Noto Sans JP',sans-serif",
+            }}>← 前へ</button>
+            <button onClick={function(){ setRefSection(function(i){ return Math.min(REFERENCE_SECTIONS.length-1,i+1); }); }} disabled={refSection===REFERENCE_SECTIONS.length-1} style={{
+              flex:1,padding:"10px",borderRadius:"8px",border:"none",cursor:refSection===REFERENCE_SECTIONS.length-1?"not-allowed":"pointer",
+              background:refSection===REFERENCE_SECTIONS.length-1?"rgba(255,255,255,0.03)":"rgba(0,80,160,0.3)",
+              color:refSection===REFERENCE_SECTIONS.length-1?"rgba(255,255,255,0.15)":"#60c8ff",fontSize:"12px",fontWeight:700,fontFamily:"'Noto Sans JP',sans-serif",
+            }}>次へ →</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===== 問題ページ =====
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#060d18 0%,#0a1628 60%,#060d18 100%)",fontFamily:"'Noto Sans JP',sans-serif",color:"#dde8f0"}}>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Bebas+Neue&display=swap" rel="stylesheet"/>
+      <style>{`*{box-sizing:border-box} @keyframes spin{to{transform:rotate(360deg)}} @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}} button{transition:all 0.15s} input{outline:none}`}</style>
+
+      {/* ヘッダー */}
+      <div style={{background:"linear-gradient(90deg,#021e4a,#023a6e)",borderBottom:"1px solid rgba(0,180,220,0.3)",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontFamily:"'Bebas Neue'",fontSize:"24px",letterSpacing:"4px",color:"#00d4ff",lineHeight:1}}>HAKYUU MASTER</div>
+          <div style={{fontSize:"9px",color:"rgba(180,210,240,0.4)",letterSpacing:"2px"}}>配球マスター　実戦問題集 PRO</div>
+        </div>
+        <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+          <button onClick={function(){ setPage("reference"); }} style={{background:"rgba(0,60,120,0.4)",border:"1px solid rgba(0,140,220,0.3)",borderRadius:"7px",padding:"6px 11px",color:"#60c8ff",fontSize:"11px",fontWeight:700,cursor:"pointer",fontFamily:"'Noto Sans JP',sans-serif"}}>
+            📖 配球論
+          </button>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:"9px",color:"rgba(180,210,240,0.4)"}}>正解率</div>
+            <div style={{fontFamily:"'Bebas Neue'",fontSize:"22px",color:"#00d4ff"}}>{totalQ>0 ? totalOK+"/"+totalQ : "―"}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{maxWidth:"500px",margin:"0 auto",padding:"12px"}}>
+
+        {/* 状況カード */}
+        {sit && (
+          <div style={{background:"rgba(2,20,60,0.6)",border:"1px solid rgba(0,140,200,0.2)",borderRadius:"14px",padding:"14px",marginBottom:"12px",animation:"fadeIn 0.3s ease"}}>
+
+            {/* 投手バー */}
+            <div style={{display:"flex",gap:"7px",marginBottom:"10px",flexWrap:"wrap"}}>
+              <div style={{background:"rgba(0,80,160,0.35)",border:"1px solid rgba(0,140,220,0.3)",borderRadius:"7px",padding:"5px 10px",fontSize:"11px",fontWeight:700,color:"#60c8ff"}}>
+                ⚾ {sit.pitcherHand}投手
+              </div>
+              <div style={{background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"7px",padding:"5px 10px",fontSize:"11px",fontWeight:700,color:sit.control.color}}>
+                {sit.control.label}
+              </div>
+            </div>
+
+            {/* 試合状況 */}
+            <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"7px"}}>▶ 試合状況</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"5px",marginBottom:"6px"}}>
+              {[["イニング・アウト",sit.inning+" "+sit.outs],["スコア",sit.score]].map(function(x){return(
+                <div key={x[0]} style={{background:"rgba(0,0,0,0.3)",borderRadius:"7px",padding:"7px 9px",borderLeft:"2px solid rgba(0,160,210,0.35)"}}>
+                  <div style={{fontSize:"9px",color:"rgba(180,210,240,0.35)",marginBottom:"2px"}}>{x[0]}</div>
+                  <div style={{fontSize:"12px",fontWeight:700}}>{x[1]}</div>
+                </div>
+              );})}
+            </div>
+
+            {/* 走者 */}
+            <div style={{background:"rgba(0,0,0,0.3)",borderRadius:"7px",padding:"7px 9px",marginBottom:"6px",borderLeft:"2px solid rgba(0,160,210,0.35)"}}>
+              <div style={{fontSize:"9px",color:"rgba(180,210,240,0.35)",marginBottom:"2px"}}>走者</div>
+              <div style={{fontSize:"12px",fontWeight:700}}>
+                {sit.runnerBase}
+                {sit.runnerDetail !== "" && <span style={{fontSize:"10px",color:"#ffb74d",fontWeight:400,marginLeft:"6px"}}>▶ {sit.runnerDetail}</span>}
+              </div>
+            </div>
+
+            {/* 打者プロフィール */}
+            <div style={{background:"rgba(0,30,70,0.5)",borderRadius:"9px",padding:"10px 11px",marginBottom:"6px",border:"1px solid rgba(0,140,220,0.2)"}}>
+              <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"6px"}}>▶ 打者情報</div>
+              <div style={{fontSize:"12px",fontWeight:700,marginBottom:"3px"}}>{sit.batter.name}（{sit.batter.hand}打ち・{sit.batter.power}・{sit.batter.swing}傾向）</div>
+              <div style={{fontSize:"10px",color:"rgba(180,210,240,0.55)",marginBottom:"6px"}}>⏱ タイミング: {sit.batter.timing}</div>
+              <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
+                <div style={{background:"rgba(0,200,100,0.1)",border:"1px solid rgba(0,200,100,0.3)",borderRadius:"5px",padding:"3px 8px",fontSize:"10px",color:"#69f0ae"}}>得意 {sit.batter.good}</div>
+                <div style={{background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.3)",borderRadius:"5px",padding:"3px 8px",fontSize:"10px",color:"#ff8a80"}}>弱点 {sit.batter.weak}</div>
+                <div style={{background:"rgba(255,0,0,0.18)",border:"1px solid rgba(255,50,50,0.4)",borderRadius:"5px",padding:"3px 8px",fontSize:"10px",color:"#ff5252",fontWeight:700}}>最苦手 {sit.batter.worstWeak}</div>
+              </div>
+            </div>
+
+            {/* 試合の文脈 */}
+            <div style={{background:"rgba(80,50,0,0.3)",borderRadius:"7px",padding:"7px 10px",marginBottom:"6px",border:"1px solid rgba(255,160,0,0.2)",fontSize:"10px",color:"#ffcc80"}}>
+              📋 {sit.context}
+            </div>
+
+            {/* カウント＋アウト */}
+            <div style={{background:"rgba(0,0,0,0.3)",borderRadius:"9px",padding:"9px 12px",marginBottom:"6px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{display:"flex",gap:"4px",alignItems:"center",marginBottom:"5px"}}>
+                  <span style={{fontSize:"9px",color:"rgba(180,210,240,0.4)",minWidth:"44px"}}>ボール</span>
+                  {[0,1,2].map(function(i){return <div key={i} style={{width:"14px",height:"14px",borderRadius:"50%",background:i<sit.count.b?"#2979ff":"rgba(41,121,255,0.12)",border:"1px solid rgba(41,121,255,0.5)"}}/>;  })}
+                </div>
+                <div style={{display:"flex",gap:"4px",alignItems:"center",marginBottom:"5px"}}>
+                  <span style={{fontSize:"9px",color:"rgba(180,210,240,0.4)",minWidth:"44px"}}>ストライク</span>
+                  {[0,1].map(function(i){return <div key={i} style={{width:"14px",height:"14px",borderRadius:"50%",background:i<sit.count.s?"#ffd600":"rgba(255,214,0,0.12)",border:"1px solid rgba(255,214,0,0.5)"}}/>;  })}
+                </div>
+                <div style={{display:"flex",gap:"4px",alignItems:"center"}}>
+                  <span style={{fontSize:"9px",color:"rgba(180,210,240,0.4)",minWidth:"44px"}}>アウト</span>
+                  {[0,1].map(function(i){return <div key={i} style={{width:"14px",height:"14px",borderRadius:"3px",background:i<outsNum?"#f44336":"rgba(244,67,54,0.12)",border:"1px solid rgba(244,67,54,0.5)"}}/>;  })}
+                </div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontFamily:"'Bebas Neue'",fontSize:"28px",color:"#fff",letterSpacing:"3px",lineHeight:1}}>{sit.count.b}-{sit.count.s}</div>
+                <div style={{fontSize:"9px",color:"rgba(180,210,240,0.35)",marginTop:"2px"}}>B - S</div>
+              </div>
+            </div>
+
+            {/* 配球の流れ */}
+            {sit.history.length > 0 && (
+              <div style={{background:"rgba(0,0,0,0.22)",borderRadius:"9px",padding:"9px 11px",marginBottom:"6px"}}>
+                <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"6px"}}>▶ ここまでの配球</div>
+                {sit.history.map(function(h,i){return(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:"5px",marginBottom:"3px"}}>
+                    <span style={{color:"rgba(180,210,240,0.3)",minWidth:"14px",fontSize:"10px"}}>{i+1}</span>
+                    <span style={{background:"rgba(0,90,170,0.35)",borderRadius:"4px",padding:"1px 6px",color:"#60c8ff",fontWeight:700,fontSize:"10px"}}>{h.pitch}</span>
+                    <span style={{color:"rgba(180,210,240,0.45)",fontSize:"10px"}}>→ {h.zoneLabel}</span>
+                    <span style={{marginLeft:"auto",color:h.result==="ストライク"?"#00e676":h.result==="ファウル"?"#ffb74d":"#ff6b6b",fontWeight:700,fontSize:"10px"}}>{h.result}</span>
+                  </div>
+                );})}
+              </div>
+            )}
+
+            {/* 目標 */}
+            <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
+              <div style={{background:"rgba(100,0,170,0.2)",border:"1px solid rgba(140,40,210,0.3)",borderRadius:"6px",padding:"4px 9px",fontSize:"10px",color:"#ce93d8"}}>🎯 {sit.outGoal}</div>
+              <div style={{background:"rgba(0,90,70,0.2)",border:"1px solid rgba(0,140,110,0.3)",borderRadius:"6px",padding:"4px 9px",fontSize:"10px",color:"#80cbc4"}}>🏏 {sit.batterGoal}</div>
+            </div>
+          </div>
+        )}
+
+        {/* 回答フェーズ */}
+        {phase === "select" && (
+          <div>
+            <div style={{display:"flex",gap:"6px",marginBottom:"9px"}}>
+              {[["pitch","⚾ 球種"],["zone","🎯 25マスコース"]].map(function(x){return(
+                <button key={x[0]} onClick={function(){setTab(x[0]);}} style={{
+                  flex:1,padding:"9px",border:"none",cursor:"pointer",
+                  background:tab===x[0]?"rgba(0,170,210,0.18)":"rgba(255,255,255,0.03)",
+                  color:tab===x[0]?"#00d4ff":"rgba(180,210,240,0.35)",
+                  fontWeight:tab===x[0]?700:400,fontSize:"12px",
+                  fontFamily:"'Noto Sans JP',sans-serif",borderRadius:"8px",
+                  borderBottom:tab===x[0]?"2px solid #00d4ff":"2px solid transparent",
+                }}>
+                  {x[1]}
+                  {x[0]==="pitch"&&selPitch&&<span style={{marginLeft:"5px",color:"#00e676"}}>✓</span>}
+                  {x[0]==="zone"&&selZone!==null&&<span style={{marginLeft:"5px",color:"#00e676"}}>✓</span>}
+                </button>
+              );})}
+            </div>
+
+            {tab==="pitch"&&(
+              <div style={{background:"rgba(2,15,45,0.7)",border:"1px solid rgba(0,140,200,0.18)",borderRadius:"12px",padding:"13px",marginBottom:"9px"}}>
+                <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"9px"}}>球種を選択</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px"}}>
+                  {PITCH_TYPES.map(function(p){return(
+                    <button key={p} onClick={function(){setSelPitch(p);}} style={{
+                      padding:"10px",borderRadius:"7px",
+                      border:selPitch===p?"2px solid #00d4ff":"1px solid rgba(255,255,255,0.08)",
+                      background:selPitch===p?"rgba(0,170,220,0.16)":"rgba(0,0,0,0.22)",
+                      color:selPitch===p?"#00d4ff":"#a0b8d0",
+                      fontWeight:selPitch===p?700:400,
+                      cursor:"pointer",fontSize:"13px",fontFamily:"'Noto Sans JP',sans-serif",
+                    }}>{p}</button>
+                  );})}
+                </div>
+              </div>
+            )}
+
+            {tab==="zone"&&sit&&(
+              <div style={{background:"rgba(2,15,45,0.7)",border:"1px solid rgba(0,140,200,0.18)",borderRadius:"12px",padding:"13px",marginBottom:"9px"}}>
+                <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"9px"}}>コースを選択（5×5）</div>
+                <div style={{display:"flex",justifyContent:"center"}}>
+                  <div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:"3px"}}>
+                      <span style={{fontSize:"9px",color:"rgba(180,210,240,0.3)"}}>{sit.batter.hand==="右"?"← 内角":"← 外角"}</span>
+                      <span style={{fontSize:"9px",color:"rgba(180,210,240,0.3)"}}>{sit.batter.hand==="右"?"外角 →":"内角 →"}</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(5, 54px)",gap:"3px"}}>
+                      {GRID_5x5.map(function(z){
+                        const sel=selZone===z.id;
+                        return(
+                          <button key={z.id} onClick={function(){setSelZone(z.id);}} style={{
+                            height:"44px",borderRadius:"5px",
+                            border:sel?("2px solid "+(z.strike?"#00d4ff":"#ffb74d")):("1px solid "+(z.strike?"rgba(0,130,210,0.22)":"rgba(80,100,130,0.13)")),
+                            background:sel?(z.strike?"rgba(0,170,220,0.22)":"rgba(255,170,50,0.18)"):(z.strike?"rgba(0,50,110,0.55)":"rgba(8,16,30,0.65)"),
+                            color:sel?(z.strike?"#00d4ff":"#ffb74d"):(z.strike?"rgba(140,180,220,0.65)":"rgba(90,110,140,0.5)"),
+                            cursor:"pointer",fontSize:"8px",fontFamily:"'Noto Sans JP',sans-serif",
+                            fontWeight:sel?700:400,lineHeight:1.2,padding:"2px",
+                          }}>{z.label}</button>
+                        );
+                      })}
+                    </div>
+                    <div style={{display:"flex",gap:"12px",marginTop:"7px",justifyContent:"center"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
+                        <div style={{width:"10px",height:"10px",borderRadius:"2px",background:"rgba(0,50,110,0.8)",border:"1px solid rgba(0,130,210,0.35)"}}/>
+                        <span style={{fontSize:"9px",color:"rgba(140,170,200,0.45)"}}>ストライク</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
+                        <div style={{width:"10px",height:"10px",borderRadius:"2px",background:"rgba(8,16,30,0.8)",border:"1px solid rgba(80,100,130,0.2)"}}/>
+                        <span style={{fontSize:"9px",color:"rgba(140,170,200,0.45)"}}>ボール</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button onClick={submit} disabled={!selPitch||selZone===null} style={{
+              width:"100%",padding:"14px",borderRadius:"9px",border:"none",
+              background:selPitch&&selZone!==null?"linear-gradient(90deg,#01457a,#005f8a)":"rgba(255,255,255,0.03)",
+              color:selPitch&&selZone!==null?"#fff":"rgba(255,255,255,0.18)",
+              fontWeight:700,fontSize:"13px",cursor:selPitch&&selZone!==null?"pointer":"not-allowed",
+              fontFamily:"'Noto Sans JP',sans-serif",letterSpacing:"0.5px",
+            }}>
+              {selPitch&&selZone!==null
+                ? "「"+selPitch+" ／ "+(GRID_5x5[selZone]?GRID_5x5[selZone].label:"")+"」で投げる →"
+                : "球種とコースを選んでください"}
+            </button>
+          </div>
+        )}
+
+        {/* ローディング */}
+        {loading&&(
+          <div style={{textAlign:"center",padding:"36px",background:"rgba(2,15,45,0.7)",borderRadius:"14px",border:"1px solid rgba(0,140,200,0.18)"}}>
+            <div style={{width:"34px",height:"34px",border:"3px solid rgba(0,200,240,0.12)",borderTop:"3px solid #00d4ff",borderRadius:"50%",animation:"spin 0.7s linear infinite",margin:"0 auto 12px"}}/>
+            <div style={{color:"rgba(180,210,240,0.4)",fontSize:"11px"}}>AIが配球を分析中...</div>
+          </div>
+        )}
+
+        {/* 結果 */}
+        {!loading&&answer&&phase==="result"&&(
+          <div style={{background:"rgba(2,15,45,0.85)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"14px",padding:"16px",animation:"fadeIn 0.3s ease"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"11px",marginBottom:"14px",background:"rgba(255,255,255,0.04)",borderRadius:"9px",padding:"11px 13px"}}>
+              <div style={{fontFamily:"'Bebas Neue'",fontSize:"44px",color:rc,lineHeight:1}}>{answer.rating}</div>
+              <div>
+                <div style={{fontSize:"14px",fontWeight:700,color:rc}}>{answer.ratingLabel}</div>
+                <div style={{fontSize:"10px",color:"rgba(180,210,240,0.45)",marginTop:"2px"}}>{selPitch} ／ {ZONE_DISPLAY[selZone]}</div>
+              </div>
+            </div>
+
+            {[
+              ["💡 配球の意図・狙い",answer.intent,"rgba(0,170,220,0.4)"],
+              ["📊 評価",answer.evaluation,"rgba(80,170,80,0.4)"],
+              ["⚠️ リスク・注意点",answer.risk,"rgba(255,150,0,0.4)"],
+              ["🔄 他の選択肢",answer.alternative,"rgba(80,160,255,0.4)"],
+              ["📌 配球の原則",answer.tip,"rgba(160,60,200,0.4)"],
+            ].map(function(x){
+              if(!x[1]) return null;
+              return(
+                <div key={x[0]} style={{marginBottom:"9px",padding:"9px 11px",background:"rgba(0,0,0,0.18)",borderRadius:"7px",borderLeft:"3px solid "+x[2]}}>
+                  <div style={{fontSize:"9px",color:"rgba(180,210,240,0.35)",marginBottom:"3px"}}>{x[0]}</div>
+                  <div style={{fontSize:"12px",lineHeight:1.75,color:"#a8c4de"}}>{x[1]}</div>
+                </div>
+              );
+            })}
+
+            {answer.goodExamples&&answer.goodExamples.length>0&&(
+              <div style={{marginBottom:"9px",padding:"9px 11px",background:"rgba(0,80,40,0.2)",borderRadius:"7px",borderLeft:"3px solid rgba(0,230,118,0.5)"}}>
+                <div style={{fontSize:"9px",color:"#00e676",marginBottom:"7px",fontWeight:700}}>✅ この場面での○な選択肢の例</div>
+                {answer.goodExamples.map(function(ex,i){return(
+                  <div key={i} style={{marginBottom:i<answer.goodExamples.length-1?"8px":"0",paddingBottom:i<answer.goodExamples.length-1?"8px":"0",borderBottom:i<answer.goodExamples.length-1?"1px solid rgba(0,230,118,0.1)":"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px"}}>
+                      <span style={{background:"rgba(0,230,118,0.15)",border:"1px solid rgba(0,230,118,0.35)",borderRadius:"4px",padding:"1px 7px",fontSize:"11px",fontWeight:700,color:"#00e676"}}>{ex.pitch}</span>
+                      <span style={{fontSize:"11px",color:"rgba(180,210,240,0.5)"}}>／</span>
+                      <span style={{fontSize:"11px",color:"rgba(180,210,240,0.7)"}}>{ex.zone}</span>
+                    </div>
+                    <div style={{fontSize:"11px",color:"rgba(160,210,180,0.8)",lineHeight:1.6}}>{ex.reason}</div>
+                  </div>
+                );})}
+              </div>
+            )}
+
+            {/* チャット */}
+            <div style={{marginTop:"12px",marginBottom:"10px"}}>
+              <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"8px",fontWeight:700}}>💬 この解説について質問する</div>
+              {chatMsgs.length>0&&(
+                <div style={{marginBottom:"8px",display:"flex",flexDirection:"column",gap:"6px",maxHeight:"260px",overflowY:"auto"}}>
+                  {chatMsgs.map(function(m,i){return(
+                    <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
+                      <div style={{
+                        maxWidth:"85%",padding:"8px 11px",
+                        borderRadius:m.role==="user"?"12px 12px 2px 12px":"12px 12px 12px 2px",
+                        background:m.role==="user"?"rgba(0,120,200,0.4)":"rgba(0,0,0,0.3)",
+                        border:m.role==="user"?"1px solid rgba(0,160,240,0.3)":"1px solid rgba(255,255,255,0.08)",
+                        fontSize:"12px",lineHeight:1.65,color:m.role==="user"?"#c8e8ff":"#a8c4de",
+                      }}>{m.content}</div>
+                    </div>
+                  );})}
+                  {chatLoad&&(
+                    <div style={{display:"flex",justifyContent:"flex-start"}}>
+                      <div style={{padding:"8px 14px",borderRadius:"12px 12px 12px 2px",background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(180,210,240,0.5)",fontSize:"12px"}}>考え中...</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={{display:"flex",gap:"6px"}}>
+                <input value={chatIn} onChange={function(e){setChatIn(e.target.value);}}
+                  onKeyDown={function(e){if(e.key==="Enter")sendChat();}}
+                  placeholder="例: このタイプにフォークが有効な理由は？"
+                  style={{flex:1,padding:"10px 12px",borderRadius:"8px",border:"1px solid rgba(0,150,220,0.25)",background:"rgba(0,0,0,0.3)",color:"#dde8f0",fontSize:"12px",fontFamily:"'Noto Sans JP',sans-serif"}}
+                />
+                <button onClick={sendChat} disabled={!chatIn.trim()||chatLoad} style={{
+                  padding:"10px 14px",borderRadius:"8px",border:"none",
+                  background:chatIn.trim()&&!chatLoad?"rgba(0,150,220,0.6)":"rgba(255,255,255,0.05)",
+                  color:chatIn.trim()&&!chatLoad?"#fff":"rgba(255,255,255,0.2)",
+                  cursor:chatIn.trim()&&!chatLoad?"pointer":"not-allowed",fontSize:"16px",
+                }}>↑</button>
+              </div>
+            </div>
+
+            <button onClick={newQ} style={{
+              width:"100%",padding:"12px",borderRadius:"8px",border:"none",
+              background:"linear-gradient(90deg,#01457a,#005f8a)",color:"#fff",
+              fontWeight:700,fontSize:"13px",cursor:"pointer",fontFamily:"'Noto Sans JP',sans-serif",
+            }}>次の問題へ →</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+  </script>
+</body>
+</html>
