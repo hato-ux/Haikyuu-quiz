@@ -218,15 +218,28 @@ function generateSituation() {
   };
 }
 
+const GEMINI_API_KEY = AIzaSyDIafvz4wYZCvTeQ3ltbvrP6d3r96JKyZU;
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY;
+
 async function callAPI(messages, sys, maxT) {
-  const body = { model:"claude-sonnet-4-20250514", max_tokens:maxT, messages:messages };
-  if (sys) body.system = sys;
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
+  // Gemini形式に変換
+  const geminiMessages = messages.map(function(m) {
+    return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] };
+  });
+  // systemプロンプトがある場合は最初のuserメッセージに付加
+  if (sys && geminiMessages.length > 0 && geminiMessages[0].role === "user") {
+    geminiMessages[0].parts[0].text = sys + "\n\n" + geminiMessages[0].parts[0].text;
+  }
+  const body = {
+    contents: geminiMessages,
+    generationConfig: { maxOutputTokens: maxT }
+  };
+  const res = await fetch(GEMINI_URL, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data && data.error ? data.error.message : "HTTP " + res.status);
-  return (data.content||[]).filter(function(b){ return b.type==="text"; }).map(function(b){ return b.text; }).join("");
+  return data.candidates[0].content.parts[0].text;
 }
 
 // ===== 配球論テキスト =====
