@@ -496,9 +496,6 @@ function App() {
     setChatLoad(false);
   }
 
-  const rc = answer && answer.rating==="○" ? "#00e676" : answer && answer.rating==="×" ? "#ff5252" : "#ffab40";
-  const outsNum = sit ? parseInt(sit.outs.replace(/[^0-9]/g,"")) : 0;
-
   // ===== ホーム・フィルター選択ページ =====
   if (page === "home") {
     const btnStyle = function(active) { return {
