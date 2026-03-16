@@ -329,8 +329,10 @@ function App() {
       '{"rating":"○か△か×","ratingLabel":"優秀か良いか普通か惜しいか改善が必要","score":1か0,"intent":"打者の弱点とタイミングを踏まえた意図2文","evaluation":"評価2〜3文","risk":"リスク1〜2文","alternative":"代替案1〜2つ","tip":"配球の原則1文","goodExamples":[{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"}]}';
     try {
       const txt = await callAPI([{role:"user",content:p}], null, 1200);
-      const m = txt.replace(/```json/g,"").replace(/```/g,"").trim().match(/\{[\s\S]*\}/);
-      if (!m) throw new Error("JSON not found");
+      // Geminiはmarkdownコードブロックで返すことがあるので除去してJSONを抽出
+      const cleaned = txt.replace(/```json/g,"").replace(/```/g,"").trim();
+      const m = cleaned.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error("The string did not match the expected pattern. Raw: " + txt.substring(0, 100));
       const parsed = JSON.parse(m[0]);
       setAnswer(parsed);
       setTotalQ(function(q){ return q+1; });
