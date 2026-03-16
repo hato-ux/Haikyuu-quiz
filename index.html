@@ -219,19 +219,10 @@ function generateSituation() {
 }
 
 async function callAPI(messages, sys, maxT) {
-  // Gemini形式に変換
-  const geminiMessages = messages.map(function(m) {
-    return { role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] };
-  });
-  // systemプロンプトがある場合は最初のuserメッセージに付加
-  if (sys && geminiMessages.length > 0 && geminiMessages[0].role === "user") {
-    geminiMessages[0].parts[0].text = sys + "\n\n" + geminiMessages[0].parts[0].text;
-  }
-  // サーバー経由でAPIを呼び出す（キーはサーバー側で管理）
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: geminiMessages, maxTokens: maxT })
+    body: JSON.stringify({ messages: messages, system: sys, maxTokens: maxT })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data && data.error ? data.error : "HTTP " + res.status);
