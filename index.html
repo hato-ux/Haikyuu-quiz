@@ -325,7 +325,7 @@ function App() {
       "【配球の流れ】" + hist + "\n" +
       "【投手の目標】" + sit.outGoal + "\n" +
       "【今回投じた球】" + selPitch + " / " + zl + "（" + (isSt?"ストライク":"ボール") + "ゾーン）\n\n" +
-      "以下のJSONのみ返答。前置き・マークダウン・コードブロック不要。最初の文字は{、最後は}:\n" +
+      "以下のJSON形式のみで返答すること。前置き・説明文・マークダウン・コードブロック（```）は絶対に使わないこと。返答の最初の文字は{で最後の文字は}であること:\n" +
       '{"rating":"○か△か×","ratingLabel":"優秀か良いか普通か惜しいか改善が必要","score":1か0,"intent":"打者の弱点とタイミングを踏まえた意図2文","evaluation":"評価2〜3文","risk":"リスク1〜2文","alternative":"代替案1〜2つ","tip":"配球の原則1文","goodExamples":[{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"}]}';
     try {
       const txt = await callAPI([{role:"user",content:p}], null, 1200);
