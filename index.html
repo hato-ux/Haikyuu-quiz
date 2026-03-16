@@ -949,15 +949,20 @@ function App() {
               <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"6px"}}>▶ 打者情報</div>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"3px"}}>{sit.batter.name}（{sit.batter.hand}打ち・{sit.batter.power}・{sit.batter.swing}傾向）</div>
               <div style={{fontSize:"10px",color:"rgba(180,210,240,0.55)",marginBottom:"4px"}}>⏱ タイミング: {sit.batter.timing}</div>
-              <div style={{
-                display:"inline-block",
-                background: sit.straightTiming==="ストレートにタイミングが合っている" ? "rgba(255,80,80,0.18)" : "rgba(0,120,255,0.18)",
-                border: sit.straightTiming==="ストレートにタイミングが合っている" ? "1px solid rgba(255,80,80,0.5)" : "1px solid rgba(0,160,255,0.5)",
-                borderRadius:"6px", padding:"3px 10px", fontSize:"11px", fontWeight:700, marginBottom:"6px",
-                color: sit.straightTiming==="ストレートにタイミングが合っている" ? "#ff8a80" : "#60c8ff",
-              }}>
-                {sit.straightTiming==="ストレートにタイミングが合っている" ? "⚡ " : "🐢 "}{sit.straightTiming}
-              </div>
+              {(function(){
+                const isOn = sit.straightTiming && sit.straightTiming.indexOf("合っている") !== -1;
+                return (
+                  <div style={{
+                    display:"inline-block",
+                    background: isOn ? "rgba(255,80,80,0.18)" : "rgba(0,120,255,0.18)",
+                    border: isOn ? "1px solid rgba(255,80,80,0.5)" : "1px solid rgba(0,160,255,0.5)",
+                    borderRadius:"6px", padding:"3px 10px", fontSize:"11px", fontWeight:700, marginBottom:"6px",
+                    color: isOn ? "#ff8a80" : "#60c8ff",
+                  }}>
+                    {isOn ? "⚡ " : "🐢 "}{sit.straightTiming}
+                  </div>
+                );
+              })()}
               <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
                 <div style={{background:"rgba(0,200,100,0.1)",border:"1px solid rgba(0,200,100,0.3)",borderRadius:"5px",padding:"3px 8px",fontSize:"10px",color:"#69f0ae"}}>得意 {sit.batter.good}</div>
                 <div style={{background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.3)",borderRadius:"5px",padding:"3px 8px",fontSize:"10px",color:"#ff8a80"}}>弱点 {sit.batter.weak}</div>
