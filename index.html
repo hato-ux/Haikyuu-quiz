@@ -31,8 +31,6 @@ const CONTROL_LEVELS = [
 const PITCH_TYPES = ["直球","カーブ","スライダー","チェンジアップ","フォーク","シュート","カットボール","ツーシーム"];
 
 // 資料Level.3に基づく打者タイプ（構え特徴 + パワー + 打球傾向 + 走力）
-const STRAIGHT_TIMING = ["ストレートにタイミングが合っている", "ストレートにタイミングが遅れている"];
-
 const BATTER_PROFILES = [
   {
     name:"グリップが高いバッター", hand:"右", swing:"外巻き",
@@ -104,47 +102,168 @@ const BATTER_PROFILES = [
     timing:"ストレートに合わせており追い込まれるとカット",
     note:"甘い球◎・外角低めと速い変化×"
   },
+  {
+    name:"上から叩くバッター（ダウンスイング型）", hand:"右", swing:"内巻き",
+    power:"中距離", speed:"普通",
+    good:"高め・インコース", weak:"低め・外角低め", worstWeak:"外角低めの変化球",
+    timing:"高めの速球に強く低めを拾いにくい",
+    note:"高め・内◎・低め外角変化×"
+  },
+  {
+    name:"すくい上げるバッター（アッパースイング型）", hand:"左", swing:"外巻き",
+    power:"長距離", speed:"鈍足",
+    good:"低め・外角", weak:"高め・インハイ", worstWeak:"インハイの速球",
+    timing:"低めに強くすくい上げるが高めに弱い",
+    note:"低め外角◎・高め特にインハイ×"
+  },
+  {
+    name:"ベース寄りに立つバッター", hand:"右", swing:"外巻き",
+    power:"中距離", speed:"俊足",
+    good:"外角（ベースに近い分リーチが届く）", weak:"インコース（詰まりやすい）", worstWeak:"厳しいインコースの速球",
+    timing:"外角が近く感じるがインコースで詰まりやすい",
+    note:"外角◎・インコースで詰まる"
+  },
 ];
 
 // 走者状況（走者ベースと矛盾しないゴール設定のため構造化）
 const RUNNER_SITUATIONS = [
   { base:"走者なし", detail:"", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","フライアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"走者なし", detail:"次の打者が強打者のため確実にアウトにしたい", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","フライアウトを取りたい","内野ゴロでリズムを作りたい","何でもアウトに"] },
   { base:"一塁", detail:"俊足・スタートが早い", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
   { base:"一塁", detail:"鈍足・盗塁の心配なし", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","フライアウトを取りたい","何でもアウトに"] },
   { base:"一塁", detail:"盗塁のサインが出ている可能性あり", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","何でもアウトに"] },
+  { base:"一塁", detail:"けん制でリードが小さい", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","何でもアウトに"] },
   { base:"二塁", detail:"外野フライで生還できる足がある", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
-  { base:"二塁", detail:"スコアリングポジション", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"二塁", detail:"スコアリングポジション・タイムリー警戒", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","外野に飛ばさせない","何でもアウトに"] },
+  { base:"二塁", detail:"打者が外野に飛ばす力がないため得点圏でも余裕がある", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
   { base:"三塁", detail:"スクイズの可能性あり", allowedGoals:["三振を取りたい","内野フライを打たせたい","何でもアウトに"] },
   { base:"三塁", detail:"内野ゴロでも本塁突入できる足", allowedGoals:["三振を取りたい","フライアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"三塁", detail:"前進守備を敷いている", allowedGoals:["三振を取りたい","内野フライを打たせたい","フライアウトを取りたい","外野深くへ打たせない","何でもアウトに"] },
   { base:"一二塁", detail:"ダブルプレーを狙いたい場面", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"一二塁", detail:"バントの可能性もある場面", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
   { base:"一三塁", detail:"スクイズ・ヒットエンドランの可能性", allowedGoals:["三振を取りたい","内野フライを打たせたい","ゴロアウトを取りたい","何でもアウトに"] },
+  { base:"一三塁", detail:"内野手の動きで三走が走るかもしれない", allowedGoals:["三振を取りたい","フライアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
   { base:"二三塁", detail:"内野ゴロでも2点入る場面", allowedGoals:["三振を取りたい","フライアウトを取りたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"二三塁", detail:"敬遠して満塁策も考えられる場面", allowedGoals:["三振を取りたい","内野フライを打たせたい","何でもアウトに"] },
   { base:"満塁", detail:"押し出し四球に注意・ゴロアウトが理想", allowedGoals:["三振を取りたい","ゴロアウトを取りたい","ダブルプレーを狙いたい","内野フライを打たせたい","何でもアウトに"] },
+  { base:"満塁", detail:"サヨナラの場面・絶対に点を与えられない", allowedGoals:["三振を取りたい","内野フライを打たせたい","ゴロアウトを取りたい","内野ゴロでゲッツーを狙いたい","何でもアウトに"] },
 ];
 
 // 打者の狙い（走者状況と矛盾しないよう状況で選ぶ）
 const BATTER_GOALS_BY_RUNNER = {
-  "走者なし": ["長打・ホームランを狙っている","初球から積極的に振ってくる","出塁したい（四球でもOK）","センター返しで確実につなぎたい","引っ張りにかかっている","ボール球を見極めてフルカウントに持ち込みたい"],
-  "一塁":     ["長打・ホームランを狙っている","右方向へ流し打ちしたい","ヒットエンドランのサインが出ている","引っ張りにかかっている","初球から積極的に振ってくる"],
-  "二塁":     ["センター返しで確実につなぎたい","右方向へ流し打ちしたい","長打を狙っている","犠牲フライを狙っている","引っ張りにかかっている"],
-  "三塁":     ["スクイズを狙っている","犠牲フライを狙っている","センター返しで確実に打ちたい","引っ張りにかかっている"],
-  "一二塁":   ["長打・ホームランを狙っている","右方向へ流し打ちしたい","ヒットエンドランのサインが出ている","引っ張りにかかっている","センター返しでつなぎたい"],
-  "一三塁":   ["スクイズを狙っている","犠牲フライを狙っている","ヒットエンドランのサインが出ている","長打を狙っている"],
-  "二三塁":   ["犠牲フライを狙っている","センター返しで確実につなぎたい","長打を狙っている","引っ張りにかかっている"],
-  "満塁":     ["犠牲フライを狙っている","長打・押し出しを狙っている","センター返しで確実につなぎたい","四球を狙ってボール球を見極めている"],
+  "走者なし": [
+    "長打・ホームランを狙っている",
+    "初球から積極的に振ってくる",
+    "出塁したい（四球でもOK）",
+    "センター返しで確実につなぎたい",
+    "引っ張りにかかっている",
+    "ボール球を見極めてフルカウントに持ち込みたい",
+    "逆方向へ流し打ちしたい",
+    "とにかく当てにきている（三振したくない）",
+    "甘い球だけを狙って一発を狙っている",
+    "追い込まれる前に早めに打ちにくる",
+    "低めを捨てて高めだけ狙っている",
+  ],
+  "一塁": [
+    "長打・ホームランを狙っている",
+    "右方向へ流し打ちしたい",
+    "ヒットエンドランのサインが出ている",
+    "引っ張りにかかっている",
+    "初球から積極的に振ってくる",
+    "走者を動かすために転がしにくる",
+    "ゴロを打って内野安打を狙っている",
+    "バスターエンドランの可能性がある",
+    "センター返しでつないでいきたい",
+  ],
+  "二塁": [
+    "センター返しで確実につなぎたい",
+    "右方向へ流し打ちしたい",
+    "長打を狙っている",
+    "犠牲フライを狙っている",
+    "引っ張りにかかっている",
+    "低めを見極めて外野フライを打ちたい",
+    "とにかくバットに当てて走者を動かしたい",
+    "逆方向に打ってタイムリーを狙っている",
+  ],
+  "三塁": [
+    "スクイズを狙っている",
+    "犠牲フライを狙っている",
+    "センター返しで確実に打ちたい",
+    "引っ張りにかかっている",
+    "高めを狙って外野フライを打ちたい",
+    "内野の頭を越えるゴロで得点を狙っている",
+    "当たりが弱くてもゴロで走者を返したい",
+  ],
+  "一二塁": [
+    "長打・ホームランを狙っている",
+    "右方向へ流し打ちしたい",
+    "ヒットエンドランのサインが出ている",
+    "引っ張りにかかっている",
+    "センター返しでつなぎたい",
+    "バスターやバントでゆさぶりをかけてくる",
+    "ゲッツーにならないようにゴロを避けている",
+    "甘い球一球に的を絞っている",
+  ],
+  "一三塁": [
+    "スクイズを狙っている",
+    "犠牲フライを狙っている",
+    "ヒットエンドランのサインが出ている",
+    "長打を狙っている",
+    "内野ゴロで三走を返そうとしている",
+    "外野に飛ばすことだけを考えている",
+    "とにかくボール球を見極めて四球を待っている",
+  ],
+  "二三塁": [
+    "犠牲フライを狙っている",
+    "センター返しで確実につなぎたい",
+    "長打を狙っている",
+    "引っ張りにかかっている",
+    "高めを打ちにきている（外野フライ狙い）",
+    "内野の前に落とすだけでよいと思っている",
+    "四球でもよいと思って選球している",
+  ],
+  "満塁": [
+    "犠牲フライを狙っている",
+    "長打・押し出しを狙っている",
+    "センター返しで確実につなぎたい",
+    "四球を狙ってボール球を見極めている",
+    "当てるだけで点が入ると思い強引に打ちにくる",
+    "押し出しを意識して慎重にゾーンを絞っている",
+    "プレッシャーで早打ちになりやすい状況",
+  ],
 };
 
 const GAME_CONTEXTS = [
+  // 打者の前打席
   "この打者は前の打席でタイムリーヒットを打っている",
   "この打者は前の打席で三振に倒れている",
-  "この打者は今日2打席連続四球を選んでいる",
   "この打者は前の打席でホームランを打っている",
+  "この打者は前の打席で四球を選んでいる",
+  "この打者は前の打席でゲッツーを打っている",
+  "この打者は前の打席でバントを失敗している",
+  // 打者の今日の状態
+  "この打者は今日絶好調でヒット2本を打っている",
+  "この打者は今日2打席連続四球を選んでいる",
+  "この打者は今日ノーヒットで焦りが見える",
+  "この打者は今日2三振を喫しており苦しんでいる",
+  "この打者は今日初打席で傾向がまだわからない",
+  // 投手の状態
   "投手は前のイニングから連続三振中で球が走っている",
   "投手は前のイニングに2四球を出し制球が乱れ気味",
+  "投手はこのイニングから登板したリリーフ投手",
+  "投手は球数が100球を超えてきており疲労が見える",
+  "投手は立ち上がりで球が高めに浮きやすい状態",
+  // 対戦相性
   "この打者はこの投手から過去に相性よく打っている",
   "この打者はこの投手が苦手で過去の対戦はほぼ凡退",
   "試合序盤でお互いのデータが少ない初対決",
-  "この打者は今日絶好調でヒット2本を打っている",
+  "この打者は左投手を得意としている",
+  "この打者は変化球投手に強いタイプ",
+  // 試合状況
+  "相手チームはこの回から打順が強打者に戻る",
+  "前のイニングに大量失点しチームの雰囲気が悪い",
+  "相手ベンチから打者に細かいサインが出ている",
+  "この打者は前の打席でデッドボールを受けており気合が入っている",
 ];
 
 // 投手目線グリッド
@@ -291,17 +410,13 @@ function generateSituation(filter) {
   const outGoal = rand(allowedGoals);
   const batterGoal = rand(batterGoalList);
 
-  const batter = rand(BATTER_PROFILES);
-  const straightTiming = rand(STRAIGHT_TIMING);
-
   return {
     inning: rand(inningPool),
     outs: outs,
     score: rand(SCORES),
     runnerBase: rs.base,
     runnerDetail: rs.detail,
-    batter: batter,
-    straightTiming: straightTiming,
+    batter: rand(BATTER_PROFILES),
     pitcherHand: rand(PITCHER_HANDS),
     control: rand(CONTROL_LEVELS),
     count: count,
@@ -432,7 +547,6 @@ function App() {
       "【打者の構えタイプ】" + sit.batter.name + "（" + sit.batter.hand + "打ち・" + sit.batter.power + "・" + sit.batter.swing + "傾向・" + sit.batter.speed + "）\n" +
       "　得意: " + sit.batter.good + " / 弱点: " + sit.batter.weak + " / 最も苦手: " + sit.batter.worstWeak + "\n" +
       "　タイミングの特徴: " + sit.batter.timing + "\n" +
-      "　ストレートのタイミング: " + sit.straightTiming + "\n" +
       "　打者の狙い: " + sit.batterGoal + "\n" +
       "【試合の文脈】" + sit.context + "\n" +
       "【カウント】" + sit.count.b + "B-" + sit.count.s + "S\n" +
@@ -440,7 +554,7 @@ function App() {
       "【投手の目標】" + sit.outGoal + "\n" +
       "【今回投じた球】" + selPitch + " / " + zl + "（" + (isSt?"ストライク":"ボール") + "ゾーン）\n\n" +
       "以下のJSON形式のみで返答すること。前置き・説明文・マークダウン・コードブロック（```）は絶対に使わないこと。返答の最初の文字は{で最後の文字は}であること:\n" +
-      '{"rating":"○か△か×","ratingLabel":"優秀か良いか普通か惜しいか改善が必要","score":1か0,"intent":"打者の弱点とタイミングを踏まえた意図2文","evaluation":"評価2〜3文","risk":"リスク1〜2文","alternative":"代替案1〜2つ","tip":"配球の原則1文","goodExamples":[{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"}]}';
+      '{"rating":"○か△か×","ratingLabel":"優秀か良いか普通か惜しいか改善が必要","score":1か0,"intent":"打者の弱点とタイミングを踏まえた意図2文","evaluation":"評価2〜3文","risk":"リスク1〜2文","alternative":"代替案1〜2つ","tip":"配球の原則1文","goodExamples":[{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"},{"pitch":"球種","zone":"コース","reason":"理由1文"}],"worstExamples":[{"pitch":"球種","zone":"コース","reason":"ダメな理由1文"},{"pitch":"球種","zone":"コース","reason":"ダメな理由1文"}]}';
     try {
       const txt = await callAPI([{role:"user",content:p}], null, 1200);
       // Geminiはmarkdownコードブロックで返すことがあるので除去してJSONを抽出
@@ -945,21 +1059,8 @@ function App() {
             <div style={{background:"rgba(0,30,70,0.5)",borderRadius:"9px",padding:"10px 11px",marginBottom:"6px",border:"1px solid rgba(0,140,220,0.2)"}}>
               <div style={{fontSize:"9px",color:"#00d4ff",letterSpacing:"2px",marginBottom:"6px"}}>▶ 打者情報</div>
               <div style={{fontSize:"12px",fontWeight:700,marginBottom:"3px"}}>{sit.batter.name}（{sit.batter.hand}打ち・{sit.batter.power}・{sit.batter.swing}傾向）</div>
-              <div style={{fontSize:"10px",color:"rgba(180,210,240,0.55)",marginBottom:"4px"}}>⏱ タイミング: {sit.batter.timing}</div>
-              {(function(){
-                const isOn = sit.straightTiming && sit.straightTiming.indexOf("合っている") !== -1;
-                return (
-                  <div style={{
-                    display:"inline-block",
-                    background: isOn ? "rgba(255,80,80,0.18)" : "rgba(0,120,255,0.18)",
-                    border: isOn ? "1px solid rgba(255,80,80,0.5)" : "1px solid rgba(0,160,255,0.5)",
-                    borderRadius:"6px", padding:"3px 10px", fontSize:"11px", fontWeight:700, marginBottom:"6px",
-                    color: isOn ? "#ff8a80" : "#60c8ff",
-                  }}>
-                    {isOn ? "⚡ " : "🐢 "}{sit.straightTiming}
-                  </div>
-                );
-              })()}
+              <div style={{fontSize:"10px",color:"rgba(180,210,240,0.55)",marginBottom:"6px"}}>⏱ タイミング: {sit.batter.timing}</div>
+
               <div style={{display:"flex",gap:"5px",flexWrap:"wrap"}}>
                 <div style={{background:"rgba(0,200,100,0.1)",border:"1px solid rgba(0,200,100,0.3)",borderRadius:"5px",padding:"3px 8px",fontSize:"10px",color:"#69f0ae"}}>得意 {sit.batter.good}</div>
                 <div style={{background:"rgba(255,80,80,0.12)",border:"1px solid rgba(255,80,80,0.3)",borderRadius:"5px",padding:"3px 8px",fontSize:"10px",color:"#ff8a80"}}>弱点 {sit.batter.weak}</div>
@@ -1154,6 +1255,23 @@ function App() {
                       <span style={{fontSize:"11px",color:"rgba(180,210,240,0.7)"}}>{ex.zone}</span>
                     </div>
                     <div style={{fontSize:"11px",color:"rgba(160,210,180,0.8)",lineHeight:1.6}}>{ex.reason}</div>
+                  </div>
+                );})}
+              </div>
+            )}
+
+            {/* 絶対ダメな配球 */}
+            {answer.worstExamples&&answer.worstExamples.length>0&&(
+              <div style={{marginBottom:"9px",padding:"9px 11px",background:"rgba(80,0,0,0.2)",borderRadius:"7px",borderLeft:"3px solid rgba(255,50,50,0.5)"}}>
+                <div style={{fontSize:"9px",color:"#ff5252",marginBottom:"7px",fontWeight:700}}>🚫 この場面で絶対にやってはいけない配球</div>
+                {answer.worstExamples.map(function(ex,i){return(
+                  <div key={i} style={{marginBottom:i<answer.worstExamples.length-1?"8px":"0",paddingBottom:i<answer.worstExamples.length-1?"8px":"0",borderBottom:i<answer.worstExamples.length-1?"1px solid rgba(255,50,50,0.1)":"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"3px"}}>
+                      <span style={{background:"rgba(255,50,50,0.15)",border:"1px solid rgba(255,50,50,0.35)",borderRadius:"4px",padding:"1px 7px",fontSize:"11px",fontWeight:700,color:"#ff5252"}}>{ex.pitch}</span>
+                      <span style={{fontSize:"11px",color:"rgba(180,210,240,0.5)"}}>／</span>
+                      <span style={{fontSize:"11px",color:"rgba(180,210,240,0.7)"}}>{ex.zone}</span>
+                    </div>
+                    <div style={{fontSize:"11px",color:"rgba(255,180,180,0.8)",lineHeight:1.6}}>{ex.reason}</div>
                   </div>
                 );})}
               </div>
